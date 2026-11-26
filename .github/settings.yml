@@ -1,4 +1,6 @@
 repository:
+  default_branch: main
+
   # PR Merge Settings
   allow_squash_merge: true
   allow_merge_commit: false
