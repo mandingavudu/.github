@@ -1,0 +1,21 @@
+# OS files
+.DS_Store
+Thumbs.db
+db.lock
+*.desktop
+
+# IDE and Editor configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Local app testing/logs
+.env
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
