@@ -1,0 +1,128 @@
+name: Addon release
+
+on:
+  workflow_call:
+    inputs:
+      app-client-id:
+        type: string
+        required: true
+      signing-email:
+        type: string
+        required: true
+      description-only:
+        type: boolean
+        default: false
+      install-libeqol:
+        type: boolean
+        default: false
+    secrets:
+      app-private-key:
+        required: true
+      signing-key:
+        required: true
+      curseforge-token:
+        required: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && !inputs.description-only))
+    runs-on: ubuntu-latest
+    concurrency: addon-release-prepare
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Calculate version and update changelog
+        id: notes
+        uses: $/.github/actions/prepare-release
+
+      - name: Create release App token
+        if: steps.notes.outputs.version != ''
+        uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.app-private-key }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Create or update the changelog PR
+        if: steps.notes.outputs.version != ''
+        uses: peter-evans/create-pull-request@v8
+        id: pr
+        with:
+          token: ${{ steps.app.outputs.token }}
+          base: main
+          branch: automation/weekly-release
+          add-paths: CHANGELOG.md
+          sign-commits: true
+          title: 'chore(release): add ${{ steps.notes.outputs.version }} changelog'
+          commit-message: 'chore(release): add ${{ steps.notes.outputs.version }} changelog'
+
+      - name: Enable squash auto-merge
+        if: steps.pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.pull-request-number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash
+
+  tag:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.merged && github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'automation/weekly-release' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.title, 'chore(release): add v')
+    runs-on: ubuntu-latest
+    concurrency: addon-release-tag-${{ github.event.pull_request.number }}
+    steps:
+      - name: Create release App token
+        uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ inputs.app-client-id }}
+          private-key: ${{ secrets.app-private-key }}
+          permission-contents: write
+
+      - uses: actions/checkout@v6
+        if: github.event.pull_request.user.login == format('{0}[bot]', steps.app.outputs.app-slug)
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+
+      - name: Sign and push the release tag
+        if: github.event.pull_request.user.login == format('{0}[bot]', steps.app.outputs.app-slug)
+        uses: $/.github/actions/sign-release-tag
+        with:
+          pull-request-title: ${{ github.event.pull_request.title }}
+          signing-email: ${{ inputs.signing-email }}
+          signing-key: ${{ secrets.signing-key }}
+
+  publish:
+    if: >-
+      (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.description-only)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Run CurseForge release steps
+        uses: $/.github/actions/publish-addon
+        with:
+          upload: ${{ github.event_name == 'push' }}
+          install-libeqol: ${{ inputs.install-libeqol }}
+          curseforge-token: ${{ secrets.curseforge-token }}
