@@ -1,0 +1,22 @@
+name: Sign release tag
+description: Validate the release commit, then sign and push its tag
+inputs:
+  pull-request-title:
+    description: Title of the merged changelog pull request
+    required: true
+  signing-email:
+    description: Email of the SSH signing key owner
+    required: true
+  signing-key:
+    description: SSH private key for signing the tag
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Validate, sign, and push the tag
+      shell: bash
+      env:
+        PR_TITLE: ${{ inputs.pull-request-title }}
+        SIGNING_EMAIL: ${{ inputs.signing-email }}
+        SIGNING_KEY: ${{ inputs.signing-key }}
+      run: bash "$GITHUB_ACTION_PATH/sign_release_tag.sh"

@@ -1,0 +1,13 @@
+name: Prepare addon release
+description: Calculate the next version and update the addon changelog
+outputs:
+  version:
+    description: The proposed release tag, when a release is needed
+    value: ${{ steps.prepare.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - name: Calculate version and update changelog
+      id: prepare
+      shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/prepare_release.py"
