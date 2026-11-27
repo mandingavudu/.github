@@ -1,0 +1,53 @@
+name: Publish addon
+description: Package the addon and sync its CurseForge description
+inputs:
+  upload:
+    description: Whether to package and upload the addon before syncing its description
+    required: true
+  install-libeqol:
+    description: Whether to install LibEQOL during packaging
+    default: 'false'
+  curseforge-token:
+    description: CurseForge API token
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Check CurseForge token
+      shell: bash
+      env:
+        CF_API_TOKEN: ${{ inputs.curseforge-token }}
+      run: |
+        if [[ -z "$CF_API_TOKEN" ]]; then
+          echo '::error::Set the CF_API_TOKEN secret in the calling repository.'
+          exit 1
+        fi
+
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Find the CurseForge project
+      id: project
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/find_curseforge_project.sh"
+
+    - name: Install LibEQOL
+      if: inputs.upload == 'true' && inputs.install-libeqol == 'true'
+      uses: R41z0r/LibEQOL@v1.0.0
+      with:
+        destination: Libs
+
+    - name: Package and upload
+      if: inputs.upload == 'true'
+      uses: BigWigsMods/packager@v2
+      env:
+        GH_API_TOKEN: ${{ github.token }}
+        CF_API_TOKEN: ${{ inputs.curseforge-token }}
+
+    - name: Sync the CurseForge description
+      shell: bash
+      env:
+        CF_API_TOKEN: ${{ inputs.curseforge-token }}
+        PROJECT_ID: ${{ steps.project.outputs.id }}
+      run: bash "$GITHUB_ACTION_PATH/sync_curseforge_description.sh"
