@@ -1,1 +1,4 @@
 _extends: diogokorok/.github
+
+repository:
+  allow_auto_merge: true
